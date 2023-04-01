@@ -655,6 +655,56 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
     }
 
     /**
+     * Retrieves members of nested Groups.
+     * This will be called recursively until all nested Groups are processed.
+     * @param  array<mixed>                       $ldap               LDAP connection
+     * @param  array<mixed>                       $config             Validated configuration
+     * @param  array<string,array<string, mixed>> $ldapGroup          LDAP Group
+     * @param  int                                &$ldapGroupOriginal Base LDAP Group, new users will be added to this group for further processing (e.g. adding)
+     * @return void                                                   Success if returned, exception thrown on error
+     */
+    private function expandNestedGroupMembers($ldap, array $config, array $ldapGroup, array &$ldapGroupOriginal)
+    {
+        if ($config["ldap"]["queries"]["nestedGroupsActive"]) {
+            $ldapGroupMemberAttribute = strtolower($config["ldap"]["queries"]["groupMemberAttribute"]);
+            foreach ($ldapGroup[$ldapGroupMemberAttribute] as $j => $ldapGroupMember) {
+                if (!is_int($j)) {
+                    continue;
+                }
+                $o = $j + 1;
+
+                #if ($this->in_array_i($ldapGroupMemberAttribute, ["member", "uniqueMember"])) {
+                    $ldapGroupsQueryAttributes = [
+                        $config["ldap"]["queries"]["groupUniqueAttribute"],
+                        $config["ldap"]["queries"]["groupMemberAttribute"],
+                    ];
+
+                    if (false === ($ldapNestedGroupsQuery = @ldap_search($ldap, $ldapGroupMember, $config["ldap"]["queries"]["nestedGroupFilter"], $ldapGroupsQueryAttributes))) {
+                        throw new \RuntimeException(sprintf("%s. (Code %d)", @ldap_error($ldap), @ldap_errno($ldap)));
+                    }
+
+                    if (is_array($ldapNestedGroups = @ldap_get_entries($ldap, $ldapNestedGroupsQuery)) && is_iterable($ldapNestedGroups)) {
+                        if (($ldapNestedGroupsNum = count($ldapNestedGroups)) >= 1) {
+                            $this->logger->notice(sprintf("%d nested directory group(s) found.", $ldapNestedGroupsNum));
+                            foreach ($ldapNestedGroups as $i => $ldapNestedGroup) {
+                                if (!is_array($ldapNestedGroup))
+                                {
+                                    continue;
+                                }
+                                
+                                // Retrieve nested groups
+                                $ldapGroupOriginal[$ldapGroupMemberAttribute] = array_merge($ldapGroupOriginal[$ldapGroupMemberAttribute], $ldapNestedGroup[$ldapGroupMemberAttribute]);
+
+                                $this->expandNestedGroupMembers($ldap, $config, $ldapNestedGroup, $ldapGroupOriginal);
+                            }
+                        }
+                    }
+                #}
+            }
+        }
+    }
+
+    /**
      * Get users and groups from LDAP.
      * @param  array<mixed>                       $config    Validated configuration
      * @param  array<string,array<string, mixed>> $users     Users output
@@ -965,6 +1015,8 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
                     if ($groupMembersAreExternal = $this->in_array_i($ldapGroupName, $config["gitlab"]["options"]["groupNamesOfExternal"])) {
                         $this->logger->info(sprintf("Group \"%s\" members are external.", $ldapGroupName));
                     }
+
+                    $this->expandNestedGroupMembers($ldap, $config, $ldapGroup, $ldapGroup);
 
                     // Retrieve group user memberships
                     foreach ($ldapGroup[$ldapGroupMemberAttribute] as $j => $ldapGroupMember) {

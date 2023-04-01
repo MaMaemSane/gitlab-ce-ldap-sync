@@ -28,6 +28,8 @@ ldap:
         groupFilter:                    "(objectClass=groupOfUniqueNames)"
         groupUniqueAttribute:           "cn"
         groupMemberAttribute:           "memberUid"
+        nestedGroupFilter:              "(objectClass=group)"
+        nestedGroupsActive:             false
 
 gitlab:
     debug: false

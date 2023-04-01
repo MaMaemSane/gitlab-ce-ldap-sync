@@ -218,6 +218,27 @@ Depending on the class of group, possible values can be "memberUid", "member", o
 
 Default: "memberUid"
 
+##### nestedGroupFilter *(string|null)*
+
+Specify a search filter for finding nested group objects.
+The DN is not limited to groupDn.
+The full DN of the nested group is taken as seen as the in the member attribute.
+With this filter, the accepted groups can be limited.
+
+The users of the nested groups will be added 
+
+For common values see groupFilter.
+
+Default: "(objectClass=group)"
+
+##### nestedGroupsActive *(bool|null)*
+
+Specify if the recursive nested group search shall be activated.
+This feature is necessary, if your rights handling in LDAP is using nested groups.
+This is not related to the sub-group handling in GitLab.
+
+Default: false
+
 ### gitlab
 
 This section configures how to communicate with your Gitlab-CE/EE instance.
